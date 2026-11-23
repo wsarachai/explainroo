@@ -36,6 +36,7 @@ import { PLATFORMS } from './post.js';
 import { bareWord } from './align.js';
 import { formatShare, share } from './share.js';
 import { formatPublish, publish } from './publish.js';
+import { formatUpdate, update } from './update.js';
 import { COMMAND_HELP, commandFlags, commandHelp } from './help.js';
 import { checkVideo, formatVideoCheck, isVideoFile, VIDEO_FILE } from './video-check.js';
 import { applyCut, formatCut, writeCut } from './cut.js';
@@ -103,6 +104,8 @@ Post a video
                         run needs a typed yes, or --yes when there is no terminal. --new posts again.
                         --draft saves the post as a draft in Buffer. A video link has to lead to a file of
                         the package's size, unless you add --media-url-unchecked
+  update [project]      send the title, description and category of a package again to its video on YouTube,
+                        after post.json changed (--via youtube, --platform, --video id, --dry-run, --yes)
 
 Product demos
   capture [project] <url>  save screenshots, wording, colors, fonts and logo of a live site, with its text
@@ -440,6 +443,19 @@ export async function main(argv) {
         }
         print(formatPublish(r), r);
         return r.stage === 'failed' ? 1 : 0;
+      }
+      case 'update': {
+        if (pos.length > 1) throw new ProjectError('usage: explainroo update [project] --via youtube [--platform shorts] [--video <id>] [--dry-run] [--yes]. Nothing was changed.');
+        const project = loadProject(pos[0], langOverride(flags));
+        const r = await update(project, { via: textFlag(flags, 'via'), platform: textFlag(flags, 'platform'), video: textFlag(flags, 'video'), dryRun: !!flags['dry-run'], yes: !!flags.yes, log, notice });
+        if (r.confirmed === false) {
+          if (json) print(null, r);
+          else process.stderr.write(`error: ${r.error}
+`);
+          return 1;
+        }
+        print(formatUpdate(r), r);
+        return 0;
       }
       case 'cut': {
         if (pos.length !== 1) throw new ProjectError('usage: explainroo cut <video> [--language en] [--min-gap seconds] [--force], then edit <name>.cut.md and run: explainroo cut <video> --apply [--dry-run] [--out file]');

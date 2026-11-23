@@ -17,6 +17,7 @@ export const YOUTUBE_REDIRECT = 'http://127.0.0.1:8976/callback';
 export const BUFFER_REDIRECT = 'https://localhost:8976/callback';
 const UPLOAD_SCOPE = 'https://www.googleapis.com/auth/youtube.upload';
 const READ_SCOPE = 'https://www.googleapis.com/auth/youtube.readonly';
+const EDIT_SCOPE = 'https://www.googleapis.com/auth/youtube.force-ssl';
 
 function sendJson(res, status, data, headers = {}) {
   res.writeHead(status, { 'Content-Type': 'application/json', ...headers });
@@ -126,9 +127,10 @@ export function grantOf(state, header, service) {
 // A login made without the browser steps, as the lines connect saves, for tests
 // that are about something else. A Buffer login uses the built-in client, so it
 // has no BUFFER_CLIENT_ID line.
-export function loginLines(state, service) {
+// { old: true } makes a YouTube login from before update, which can't change a video.
+export function loginLines(state, service, { old = false } = {}) {
   const grantId = next(state, 'grant-');
-  const scope = service === 'youtube' ? `${UPLOAD_SCOPE} ${READ_SCOPE}` : 'account:read posts:read posts:write offline_access';
+  const scope = service === 'youtube' ? `${UPLOAD_SCOPE} ${READ_SCOPE}${old ? '' : ` ${EDIT_SCOPE}`}` : 'account:read posts:read posts:write offline_access';
   state.grants.set(grantId, { service, scope, revoked: false, refresh: null, client_id: service === 'youtube' ? GOOGLE_CLIENT.id : BUFFER_CLIENT });
   const tokens = issue(state, grantId, { refresh: true });
   if (service === 'youtube') return { YOUTUBE_CLIENT_ID: GOOGLE_CLIENT.id, YOUTUBE_CLIENT_SECRET: GOOGLE_CLIENT.secret, YOUTUBE_REFRESH_TOKEN: tokens.refresh_token };
@@ -261,7 +263,25 @@ const youtubeRoutes = {
     if (!grantOf(p, req.headers.authorization, 'youtube')) return googleError(res, 401, 'authError', 'Invalid Credentials');
     const url = new URL(req.url, 'http://fake');
     const video = p.youtube.videos.get(url.searchParams.get('id'));
-    sendJson(res, 200, { kind: 'youtube#videoListResponse', items: video ? [{ id: video.id, status: { ...video.status, uploadStatus: 'processed' }, processingDetails: { processingStatus: 'succeeded' } }] : [] });
+    const parts = String(url.searchParams.get('part')).split(',');
+    const channelId = p.youtube.channels[0]?.id;
+    sendJson(res, 200, { kind: 'youtube#videoListResponse', items: video ? [{ id: video.id, ...(parts.includes('snippet') ? { snippet: { channelId, ...video.snippet } } : {}), status: { ...video.status, uploadStatus: 'processed' }, processingDetails: { processingStatus: 'succeeded' } }] : [] });
+  },
+  // A PUT replaces the whole snippet, as YouTube does: a field left out is gone.
+  'PUT /youtube/v3/videos': ({ req, res, body, state }) => {
+    const p = state.publishing;
+    const grant = grantOf(p, req.headers.authorization, 'youtube');
+    if (!grant) return googleError(res, 401, 'authError', 'Invalid Credentials');
+    if (!grant.scope.split(' ').includes(EDIT_SCOPE)) return googleError(res, 403, 'insufficientPermissions', 'Request had insufficient authentication scopes.');
+    const url = new URL(req.url, 'http://fake');
+    if (url.searchParams.get('part') !== 'snippet') return googleError(res, 400, 'invalidPart', 'part=snippet expected');
+    const video = p.youtube.videos.get(body?.id);
+    if (!video) return googleError(res, 404, 'videoNotFound', 'The video that you are trying to update cannot be found.');
+    const sn = body.snippet ?? {};
+    if (typeof sn.title !== 'string' || !sn.title.trim() || /[<>]/.test(sn.title) || typeof sn.categoryId !== 'string') return googleError(res, 400, 'invalidVideoMetadata', 'title and categoryId are required');
+    video.snippet = { ...sn };
+    delete video.snippet.channelId;
+    sendJson(res, 200, { kind: 'youtube#video', id: video.id, snippet: { channelId: p.youtube.channels[0]?.id, ...video.snippet } });
   },
 };
 

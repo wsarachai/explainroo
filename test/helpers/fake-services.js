@@ -370,7 +370,7 @@ export async function startFakeServices({ routes = {} } = {}) {
     // Channels, accounts, uploads and posts of the posting services, to set up or read.
     publishing: state.publishing,
     // The .env lines of a login to youtube or buffer, made without the browser.
-    login: (service) => loginLines(state.publishing, service),
+    login: (service, options) => loginLines(state.publishing, service, options),
     // Ends the access tokens of a service, as an hour would.
     expireAccess: (service) => expireAccess(state.publishing, service),
     // Resolves once a route has seen n requests.

@@ -362,6 +362,8 @@ On YouTube, the status after the post is the upload status, the privacy and
 the processing. `publish` sends no cover and no captions. They are in the
 package folder, as `video.cover.jpg` and `video.srt`, for YouTube Studio.
 
+To change the words of a video that is up, see `explainroo update --help`.
+
 ## Buffer
 
 **Buffer** has no upload, so it needs a public https link to this exact

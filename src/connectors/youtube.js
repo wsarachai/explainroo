@@ -14,7 +14,9 @@ import { ProjectError, ServiceError, hideSecrets, rememberSecret, thrownOutcome 
 import { tokenRequest } from '../oauth.js';
 import { serviceUrl } from '../services.js';
 
-export const YOUTUBE_SCOPES = ['https://www.googleapis.com/auth/youtube.upload', 'https://www.googleapis.com/auth/youtube.readonly'];
+// youtube.force-ssl lets update change the title and description of a video that
+// is up already. A login made before update existed has only the first two.
+export const YOUTUBE_SCOPES = ['https://www.googleapis.com/auth/youtube.upload', 'https://www.googleapis.com/auth/youtube.readonly', 'https://www.googleapis.com/auth/youtube.force-ssl'];
 export const YOUTUBE_REDIRECT = 'http://127.0.0.1:8976/callback';
 const AUTHORIZE = 'https://accounts.google.com/o/oauth2/v2/auth';
 const auth = { id: 'youtube-auth', name: 'Google sign-in', baseUrl: 'https://oauth2.googleapis.com' };
@@ -245,6 +247,51 @@ async function postStatus(dir, id, { platform } = {}) {
   };
 }
 
+// The words of a video that is up: its snippet, or null when this login's
+// YouTube does not list it.
+async function readWords(dir, id) {
+  const json = await read(dir, '/youtube/v3/videos', { part: 'snippet', id });
+  const item = Array.isArray(json.items) ? json.items.find((v) => v?.id === id) : null;
+  return item?.snippet ?? null;
+}
+
+// Sends a whole snippet. The same snippet twice leaves the same video, so it may go
+// again after a dropped connection, a 5xx or a token that ran out.
+async function updateWords(dir, id, snippet) {
+  const url = `${serviceUrl(connector)}/youtube/v3/videos?part=snippet`;
+  let trouble = '';
+  for (let tries = 1; tries <= READ_TRIES; tries++) {
+    let res;
+    let json = null;
+    try {
+      res = await fetch(url, { method: 'PUT', signal: AbortSignal.timeout(30000), headers: { Authorization: `Bearer ${await accessToken(dir)}`, 'Content-Type': 'application/json; charset=UTF-8' }, body: JSON.stringify({ id, snippet }) });
+      json = await res.json().catch(() => null);
+    } catch (e) {
+      if (e instanceof ProjectError) throw e;
+      trouble = 'YouTube did not answer';
+      await sleep(250 * tries);
+      continue;
+    }
+    if (res.ok && json) return json.snippet ?? null;
+    if (res.status === 401 && tries < READ_TRIES) {
+      cached = null;
+      continue;
+    }
+    const reason = json?.error?.errors?.[0]?.reason;
+    if (res.status === 403 && (reason === 'insufficientPermissions' || /scope/i.test(said(json)))) {
+      fail(`the saved YouTube login can upload videos but not change them, because it was made before explainroo asked for that. Run "${command}" again to sign in, then run the same command. Nothing was changed.`);
+    }
+    if (res.status === 429) fail(`YouTube has had too many requests.${retryWords(res.headers.get('retry-after'))} Nothing was changed.`);
+    if (res.status >= 500) {
+      trouble = `YouTube answered with HTTP ${res.status}`;
+      await sleep(250 * tries);
+      continue;
+    }
+    throw new ServiceError(`YouTube refused the change (HTTP ${res.status}${said(json) ? `, ${said(json)}` : ''})`, 'refused');
+  }
+  throw new ServiceError(trouble, 'later');
+}
+
 // A new login is tested by reading its channel. Returns the channel's name.
 async function test(accessTokenValue) {
   let res;
@@ -288,6 +335,8 @@ const connector = {
   upload,
   uploadStatus,
   postStatus,
+  readWords,
+  updateWords,
 };
 
 export default connector;

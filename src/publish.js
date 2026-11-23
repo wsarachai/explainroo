@@ -82,7 +82,7 @@ function clock(seconds) {
 
 // The package to post. Without --platform, YouTube takes the youtube package. The
 // other services take the one package they can post, and list them when there are more.
-function pickPlatform(project, via, platform) {
+export function pickPlatform(project, via, platform) {
   if (platform !== undefined) {
     if (!Object.hasOwn(PLATFORMS, platform)) fail(`there is no platform "${platform}". The platforms are ${allOf(Object.keys(PLATFORMS))}.`);
     return platform;
@@ -94,7 +94,7 @@ function pickPlatform(project, via, platform) {
   fail(`more than one package could go through ${VIA[via].name}: ${oneOf(ready)}. Say which one with --platform. Nothing was sent.`);
 }
 
-function checkPair(via, platform) {
+export function checkPair(via, platform) {
   const network = ROUTES[via][platform];
   if (network) return network;
   const others = Object.keys(VIA).filter((name) => ROUTES[name][platform]);
@@ -103,7 +103,7 @@ function checkPair(via, platform) {
 
 // The delivery folder, as package left it. publish never renders, and it never
 // posts a file that changed since, or one that verify found errors in.
-function readPackage(project, platform) {
+export function readPackage(project, platform) {
   const { dir } = project;
   const folder = packageDir(project, platform);
   const again = `"${selfCommand()} package ${projectWord(dir)}${langArg(project)} --platform ${platform}"`;
@@ -130,7 +130,7 @@ function readPackage(project, platform) {
 
 // YouTube refuses a title or a description with < or >, on every route, so that
 // stops here, before anything is sent.
-function checkYoutubeWords(network, pkg) {
+export function checkYoutubeWords(network, pkg) {
   if (network !== 'youtube') return;
   const field = /[<>]/.test(pkg.post.title) ? 'title' : /[<>]/.test(pkg.post.description) || pkg.post.hashtags.some((tag) => /[<>]/.test(tag)) ? 'description' : null;
   if (field) fail(`YouTube does not take < or > in a ${field}. Change it in post.json and run ${pkg.again} again. Nothing was sent.`);
@@ -357,7 +357,7 @@ function planFacts(via, platform, network, { pkg, privacy, media, destination, a
   };
 }
 
-function quoteBlock(text) {
+export function quoteBlock(text) {
   return String(text).split('\n').map((line) => `           | ${line}`).join('\n');
 }
 
@@ -404,7 +404,7 @@ export function publishKey(via, sha256, network, destination) {
 // The channel or account to post to. One is picked by itself. Several are listed,
 // and --channel or --account picks one. Locked or disconnected Buffer channels are
 // never offered.
-async function chooseDestination(via, network, dir, { channel, account }) {
+export async function chooseDestination(via, network, dir, { channel, account }) {
   const asked = via === 'buffer' ? channel : via === 'blotato' ? account : undefined;
   const flag = via === 'buffer' ? '--channel' : '--account';
   const found = await VIA[via].destinations(dir, network);
@@ -640,7 +640,7 @@ async function confirmed({ yes, ask, draft }) {
   return ask(draft ? 'Type yes to save this as a draft in your Buffer, or anything else to stop: ' : 'Type yes to post this under your name, or anything else to stop: ');
 }
 
-function askYes(question) {
+export function askYes(question) {
   return new Promise((resolve) => {
     const rl = readline.createInterface({ input: process.stdin, output: process.stderr });
     rl.question(question, (answer) => {

@@ -111,6 +111,12 @@ export const COMMAND_HELP = {
     options: [['--via <service>', 'youtube, buffer or blotato'], ['--platform <name>', 'the package to post'], ['--dry-run', 'show the post and send nothing'], ['--yes', 'post without asking, where there is no terminal'], ['--privacy <p>', 'private, unlisted or public on YouTube'], ['--media-url <url>', 'a public link to the video, for Buffer and Blotato'], ['--media-url-unchecked', 'post the link without checking that it leads to a file of the package\'s size'], ['--channel <id>', 'the Buffer channel'], ['--account <id>', 'the Blotato account'], ['--draft', 'save it as a draft in Buffer'], ['--new', 'post again'], LANG, JSON_OUT],
     example: 'publish videos/how-dns-works --via youtube --dry-run',
   },
+  update: {
+    usage: 'update [project] --via youtube [options]',
+    about: 'Sends the title, description and category of a package again to its video on YouTube, after post.json changed and package ran again. Nothing else about the video changes. It shows the change first, and a real run needs a typed yes, or --yes when there is no terminal. A login made before this command existed has to sign in again with "explainroo connect youtube".',
+    options: [['--via <service>', 'youtube, the only service update can change'], ['--platform <name>', 'youtube or shorts, the package whose words go'], ['--video <id>', 'the video to change, when the record has no post of this package'], ['--dry-run', 'show the change and send nothing'], ['--yes', 'change it without asking, where there is no terminal'], LANG, JSON_OUT],
+    example: 'update videos/how-dns-works --via youtube --dry-run',
+  },
   capture: {
     usage: 'capture [project] <url> [options]',
     about: 'Saves screenshots, wording, colors, fonts, logo, text and a list of images of a live site.',
