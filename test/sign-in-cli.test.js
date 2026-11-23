@@ -37,7 +37,7 @@ test('the YouTube sign-in: two lines on stdin, a PKCE link, the address the brow
   assert.equal(p.get('code_challenge_method'), 'S256');
   assert.equal(p.get('access_type'), 'offline');
   assert.equal(p.get('prompt'), 'consent');
-  assert.deepEqual(p.get('scope').split(' '), ['https://www.googleapis.com/auth/youtube.upload', 'https://www.googleapis.com/auth/youtube.readonly']);
+  assert.deepEqual(p.get('scope').split(' '), ['https://www.googleapis.com/auth/youtube.upload', 'https://www.googleapis.com/auth/youtube.readonly', 'https://www.googleapis.com/auth/youtube.force-ssl']);
   assert.equal(out.redirect_uri, YOUTUBE_REDIRECT);
   // The client is saved now, the verifier waits in the settings folder, and no token exists yet.
   assert.equal(readEnvFile(envFile, 'YOUTUBE_CLIENT_ID'), GOOGLE_CLIENT.id);
@@ -89,7 +89,7 @@ test('a sign-in refuses an address from another sign-in, a refusal in the browse
   assert.match(wrong.stderr, /needs the whole address from the browser's address bar/);
   assert.equal(fake.count('youtube-auth', 'POST /token'), 0);
   // The address without its scheme, as an address bar may copy it, still works.
-  const without = fake.approve(current, { scope: 'https://www.googleapis.com/auth/youtube.upload' }).replace(/^http:\/\//, '');
+  const without = fake.approve(current, { scope: 'https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.force-ssl' }).replace(/^http:\/\//, '');
   const narrow = await cli(['connect', 'youtube', '--callback-url', without]);
   assert.equal(narrow.code, 1);
   assert.match(narrow.stderr, /did not allow everything explainroo needs \(https:\/\/www\.googleapis\.com\/auth\/youtube\.readonly is missing\).*Nothing was saved\./);

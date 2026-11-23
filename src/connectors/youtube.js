@@ -292,6 +292,61 @@ async function updateWords(dir, id, snippet) {
   throw new ServiceError(trouble, 'later');
 }
 
+// One write to YouTube, with one more try after a token that ran out. A dropped
+// connection or a 5xx is a ServiceError 'later', since nobody knows if it arrived.
+async function write(dir, method, url, { headers = {}, body, what }) {
+  for (let tries = 1; ; tries++) {
+    let res;
+    let json = null;
+    try {
+      res = await fetch(url, { method, signal: AbortSignal.timeout(120000), headers: { Authorization: `Bearer ${await accessToken(dir)}`, ...headers }, body });
+      json = await res.json().catch(() => null);
+    } catch (e) {
+      if (e instanceof ProjectError) throw e;
+      throw new ServiceError(`the connection to YouTube dropped while sending ${what}`, 'later');
+    }
+    if (res.ok) return json ?? {};
+    if (res.status === 401 && tries === 1) {
+      cached = null;
+      continue;
+    }
+    const reason = json?.error?.errors?.[0]?.reason;
+    if (res.status === 403 && (reason === 'insufficientPermissions' || /scope/i.test(said(json)))) {
+      fail(`the saved YouTube login can upload videos but not change them, because it was made before explainroo asked for that. Run "${command}" again to sign in, then run the same command. Nothing more was changed.`);
+    }
+    if (res.status === 429) throw new ServiceError(`YouTube refused ${what}: too many were sent recently (${said(json) || 'HTTP 429'}).${retryWords(res.headers.get('retry-after'))} Try again in an hour or so`, 'refused');
+    if (res.status >= 500) throw new ServiceError(`YouTube answered with HTTP ${res.status} to ${what}`, 'later');
+    throw new ServiceError(`YouTube refused ${what} (HTTP ${res.status}${said(json) ? `, ${said(json)}` : ''})`, 'refused');
+  }
+}
+
+// Sets the video's cover. YouTube takes JPEG or PNG up to 2 MB, and only from a
+// channel that is verified.
+async function setThumbnail(dir, id, file) {
+  const url = `${serviceUrl(connector)}/upload/youtube/v3/thumbnails/set?videoId=${encodeURIComponent(id)}`;
+  return write(dir, 'POST', url, { headers: { 'Content-Type': file.endsWith('.png') ? 'image/png' : 'image/jpeg' }, body: fs.readFileSync(file), what: 'the cover' });
+}
+
+// The caption tracks of a video. Reading them needs the same login as changing them.
+async function listCaptions(dir, id) {
+  const json = await read(dir, '/youtube/v3/captions', { part: 'snippet', videoId: id });
+  return Array.isArray(json.items) ? json.items.filter((c) => typeof c?.id === 'string' && c.snippet) : [];
+}
+
+// Adds a caption track, or with `trackId` puts a new file into that track.
+async function putCaptions(dir, { trackId = null, videoId, language, name, file }) {
+  const boundary = `explainroo${Date.now().toString(36)}`;
+  const snippet = trackId ? { isDraft: false } : { videoId, language, name, isDraft: false };
+  const meta = JSON.stringify(trackId ? { id: trackId, snippet } : { snippet });
+  const body = Buffer.concat([
+    Buffer.from(`--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${meta}\r\n--${boundary}\r\nContent-Type: application/x-subrip\r\n\r\n`),
+    fs.readFileSync(file),
+    Buffer.from(`\r\n--${boundary}--\r\n`),
+  ]);
+  const url = `${serviceUrl(connector)}/upload/youtube/v3/captions?part=snippet&uploadType=multipart`;
+  return write(dir, trackId ? 'PUT' : 'POST', url, { headers: { 'Content-Type': `multipart/related; boundary=${boundary}` }, body, what: 'the captions' });
+}
+
 // A new login is tested by reading its channel. Returns the channel's name.
 async function test(accessTokenValue) {
   let res;
@@ -337,6 +392,9 @@ const connector = {
   postStatus,
   readWords,
   updateWords,
+  setThumbnail,
+  listCaptions,
+  putCaptions,
 };
 
 export default connector;

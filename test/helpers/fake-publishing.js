@@ -37,6 +37,11 @@ export function publishingState() {
       channels: [{ id: 'UCfakechannel0000000000', snippet: { title: 'Fake Channel', customUrl: '@fakechannel' } }],
       sessions: new Map(),
       videos: new Map(),
+      // Covers set per video (sha256 of the picture), and caption tracks by id. Set
+      // thumbnailsLeft to a number to answer 429 once it runs out.
+      thumbnails: new Map(),
+      captions: new Map(),
+      thumbnailsLeft: null,
     },
     buffer: {
       organizations: [{ id: 'org-1', name: 'Fake Org' }],
@@ -203,6 +208,33 @@ function sessionAnswer(res, session) {
   return res.end();
 }
 
+// A multipart caption upload: the JSON part, then the file. A PUT names the track.
+function captionUpload({ req, res, raw, state }, replace) {
+  const p = state.publishing;
+  const grant = grantOf(p, req.headers.authorization, 'youtube');
+  if (!grant) return googleError(res, 401, 'authError', 'Invalid Credentials');
+  if (!grant.scope.split(' ').includes(EDIT_SCOPE)) return googleError(res, 403, 'insufficientPermissions', 'Request had insufficient authentication scopes.');
+  const boundary = /boundary=([^;]+)/.exec(req.headers['content-type'] ?? '')?.[1];
+  const parts = boundary ? raw.toString('utf8').split(`--${boundary}`).slice(1, -1).map((part) => part.replace(/^\r\n/, '').replace(/\r\n$/, '')) : [];
+  const split = (part) => { const at = part.indexOf('\r\n\r\n'); return [part.slice(0, at), part.slice(at + 4)]; };
+  if (parts.length !== 2) return googleError(res, 400, 'badContent', 'a multipart body with metadata and a caption file is expected');
+  const meta = JSON.parse(split(parts[0])[1]);
+  const file = split(parts[1])[1];
+  if (replace) {
+    const track = p.youtube.captions.get(meta.id);
+    if (!track) return googleError(res, 404, 'captionNotFound', 'The caption track could not be found.');
+    track.body = file;
+    track.puts = (track.puts ?? 0) + 1;
+    return sendJson(res, 200, { kind: 'youtube#caption', id: track.id, snippet: { videoId: track.videoId, language: track.language, name: track.name } });
+  }
+  const sn = meta.snippet ?? {};
+  if (!p.youtube.videos.get(sn.videoId)) return googleError(res, 404, 'videoNotFound', 'The video could not be found.');
+  if (!sn.language) return googleError(res, 400, 'invalidMetadata', 'snippet.language is required');
+  const id = next(p, 'cap-');
+  p.youtube.captions.set(id, { id, videoId: sn.videoId, language: sn.language, name: sn.name ?? '', trackKind: 'standard', body: file });
+  sendJson(res, 200, { kind: 'youtube#caption', id, snippet: { videoId: sn.videoId, language: sn.language, name: sn.name ?? '' } });
+}
+
 const youtubeRoutes = {
   'GET /youtube/v3/channels': ({ req, res, state }) => {
     const grant = grantOf(state.publishing, req.headers.authorization, 'youtube');
@@ -267,6 +299,32 @@ const youtubeRoutes = {
     const channelId = p.youtube.channels[0]?.id;
     sendJson(res, 200, { kind: 'youtube#videoListResponse', items: video ? [{ id: video.id, ...(parts.includes('snippet') ? { snippet: { channelId, ...video.snippet } } : {}), status: { ...video.status, uploadStatus: 'processed' }, processingDetails: { processingStatus: 'succeeded' } }] : [] });
   },
+  'POST /upload/youtube/v3/thumbnails/set': ({ req, res, raw, state }) => {
+    const p = state.publishing;
+    const grant = grantOf(p, req.headers.authorization, 'youtube');
+    if (!grant) return googleError(res, 401, 'authError', 'Invalid Credentials');
+    const url = new URL(req.url, 'http://fake');
+    const video = p.youtube.videos.get(url.searchParams.get('videoId'));
+    if (!video) return googleError(res, 404, 'videoNotFound', 'The video that you are trying to update cannot be found.');
+    if (!/^image\/(jpeg|png)$/.test(req.headers['content-type'] ?? '')) return googleError(res, 400, 'invalidImage', 'The image is not a JPEG or PNG.');
+    if (p.youtube.thumbnailsLeft !== null) {
+      if (p.youtube.thumbnailsLeft <= 0) return googleError(res, 429, 'uploadRateLimitExceeded', 'The user has uploaded too many thumbnails recently. Please try the request again later.');
+      p.youtube.thumbnailsLeft -= 1;
+    }
+    p.youtube.thumbnails.set(video.id, sha256(raw));
+    sendJson(res, 200, { kind: 'youtube#thumbnailSetResponse', items: [{ default: { url: `https://i.ytimg.com/vi/${video.id}/default.jpg` } }] });
+  },
+  'GET /youtube/v3/captions': ({ req, res, state }) => {
+    const p = state.publishing;
+    const grant = grantOf(p, req.headers.authorization, 'youtube');
+    if (!grant) return googleError(res, 401, 'authError', 'Invalid Credentials');
+    if (!grant.scope.split(' ').includes(EDIT_SCOPE)) return googleError(res, 403, 'insufficientPermissions', 'Request had insufficient authentication scopes.');
+    const videoId = new URL(req.url, 'http://fake').searchParams.get('videoId');
+    const items = [...p.youtube.captions.values()].filter((c) => c.videoId === videoId).map((c) => ({ kind: 'youtube#caption', id: c.id, snippet: { videoId: c.videoId, language: c.language, name: c.name, trackKind: c.trackKind } }));
+    sendJson(res, 200, { kind: 'youtube#captionListResponse', items });
+  },
+  'POST /upload/youtube/v3/captions': (ctx) => captionUpload(ctx, false),
+  'PUT /upload/youtube/v3/captions': (ctx) => captionUpload(ctx, true),
   // A PUT replaces the whole snippet, as YouTube does: a field left out is gone.
   'PUT /youtube/v3/videos': ({ req, res, body, state }) => {
     const p = state.publishing;

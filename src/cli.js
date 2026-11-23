@@ -105,7 +105,8 @@ Post a video
                         --draft saves the post as a draft in Buffer. A video link has to lead to a file of
                         the package's size, unless you add --media-url-unchecked
   update [project]      send the title, description and category of a package again to its video on YouTube,
-                        after post.json changed (--via youtube, --platform, --video id, --dry-run, --yes)
+                        after post.json changed. --cover sets the package's cover as the thumbnail, --captions
+                        puts its captions on the video (--via youtube, --platform, --video id, --dry-run, --yes)
 
 Product demos
   capture [project] <url>  save screenshots, wording, colors, fonts and logo of a live site, with its text
@@ -195,7 +196,7 @@ function parseArgs(argv) {
   }
   return { pos, flags };
 }
-const BOOL = new Set(['json', 'keep-profile', 'all', 'record', 'apply', 'avatars', 'draft', 'estimate', 'transparent', 'force', 'fetch', 'help', 'version', 'quiet', 'open', 'no-style', 'mobile', 'list', 'sections', 'new', 'key-stdin', 'audio', 'dry-run', 'no-wait', 'no-watermark', 'yes', 'media-url-unchecked', ...LISTS_VOICES.map((c) => c.id), 'verbose', 'large']);
+const BOOL = new Set(['json', 'keep-profile', 'all', 'record', 'apply', 'avatars', 'draft', 'estimate', 'transparent', 'force', 'fetch', 'help', 'version', 'quiet', 'open', 'no-style', 'mobile', 'list', 'sections', 'new', 'key-stdin', 'audio', 'dry-run', 'no-wait', 'no-watermark', 'yes', 'media-url-unchecked', 'cover', 'captions', ...LISTS_VOICES.map((c) => c.id), 'verbose', 'large']);
 
 // What a command adds when it refuses a flag. A flag publish ignored could
 // change what a person thinks is posted, like a time for a post, when it goes
@@ -445,9 +446,9 @@ export async function main(argv) {
         return r.stage === 'failed' ? 1 : 0;
       }
       case 'update': {
-        if (pos.length > 1) throw new ProjectError('usage: explainroo update [project] --via youtube [--platform shorts] [--video <id>] [--dry-run] [--yes]. Nothing was changed.');
+        if (pos.length > 1) throw new ProjectError('usage: explainroo update [project] --via youtube [--cover] [--captions] [--platform shorts] [--video <id>] [--dry-run] [--yes]. Nothing was changed.');
         const project = loadProject(pos[0], langOverride(flags));
-        const r = await update(project, { via: textFlag(flags, 'via'), platform: textFlag(flags, 'platform'), video: textFlag(flags, 'video'), dryRun: !!flags['dry-run'], yes: !!flags.yes, log, notice });
+        const r = await update(project, { via: textFlag(flags, 'via'), platform: textFlag(flags, 'platform'), video: textFlag(flags, 'video'), cover: !!flags.cover, captions: !!flags.captions, dryRun: !!flags['dry-run'], yes: !!flags.yes, log, notice });
         if (r.confirmed === false) {
           if (json) print(null, r);
           else process.stderr.write(`error: ${r.error}
@@ -455,7 +456,7 @@ export async function main(argv) {
           return 1;
         }
         print(formatUpdate(r), r);
-        return 0;
+        return r.failed ? 1 : 0;
       }
       case 'cut': {
         if (pos.length !== 1) throw new ProjectError('usage: explainroo cut <video> [--language en] [--min-gap seconds] [--force], then edit <name>.cut.md and run: explainroo cut <video> --apply [--dry-run] [--out file]');

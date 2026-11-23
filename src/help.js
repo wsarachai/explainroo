@@ -113,9 +113,9 @@ export const COMMAND_HELP = {
   },
   update: {
     usage: 'update [project] --via youtube [options]',
-    about: 'Sends the title, description and category of a package again to its video on YouTube, after post.json changed and package ran again. Nothing else about the video changes. It shows the change first, and a real run needs a typed yes, or --yes when there is no terminal. A login made before this command existed has to sign in again with "explainroo connect youtube".',
-    options: [['--via <service>', 'youtube, the only service update can change'], ['--platform <name>', 'youtube or shorts, the package whose words go'], ['--video <id>', 'the video to change, when the record has no post of this package'], ['--dry-run', 'show the change and send nothing'], ['--yes', 'change it without asking, where there is no terminal'], LANG, JSON_OUT],
-    example: 'update videos/how-dns-works --via youtube --dry-run',
+    about: 'Sends the title, description and category of a package again to its video on YouTube, after post.json changed and package ran again. --cover also sets the cover of the package as the thumbnail, and --captions puts its captions in a track of the language of the video, a new one or the one there. The same cover or captions file is not sent twice. Privacy, the AI label and the file stay as they are. It shows the change first, and a real run needs a typed yes, or --yes when there is no terminal. A login made before this command existed has to sign in again with "explainroo connect youtube".',
+    options: [['--via <service>', 'youtube, the only service update can change'], ['--cover', 'set the video.cover.jpg of the package as the thumbnail. YouTube takes covers only from a verified channel, and only so many a day'], ['--captions', 'put the video.srt of the package on the video, in a track of the language of the video'], ['--platform <name>', 'youtube or shorts, the package whose words go'], ['--video <id>', 'the video to change, when the record has no post of this package'], ['--dry-run', 'show the change and send nothing'], ['--yes', 'change it without asking, where there is no terminal'], LANG, JSON_OUT],
+    example: 'update videos/how-dns-works --via youtube --cover --captions --dry-run',
   },
   capture: {
     usage: 'capture [project] <url> [options]',

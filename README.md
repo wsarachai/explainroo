@@ -135,7 +135,7 @@ agent run them:
 | `share` | Nothing in this version, because the hosted service is coming. Once it runs, the video file and its title | explainroo.com |
 | `publish` | The video or a link to it, its title and its text. With a link, first a request for the size of the file there | YouTube, Buffer or Blotato, and whatever they send it to. The size request goes to the host of the link |
 | `publish --dry-run` | Your login, to read your channels or accounts, and the same size request | YouTube, Buffer or Blotato, and the host of the link |
-| `update` | Your login, to read the video, and its new title, description and category | YouTube |
+| `update` | Your login, to read the video and its captions, and its new title, description and category, with `--cover` the cover picture and with `--captions` the captions file | YouTube |
 | `capture` | Requests for the page you name and the files it loads | That site and the servers it loads from |
 | `formats add --yes` | A git clone of the address you name. Without `--yes` it only prints what it will run | The host of that Git repository |
 | `presenter` | The narration of one scene, as sound, and the id of the avatar. `--avatars` and `--dry-run` send only your key | The presenter service you set up. None is built in yet |
